@@ -1,0 +1,50 @@
+name: 云端编译IPA
+on:
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: 源码仓库地址
+        required: true
+        default: ''
+      source_branch:
+        description: 分支
+        required: false
+        default: main
+      scheme:
+        description: Scheme名称
+        required: true
+        default: ''
+      project_path:
+        description: xcodeproj路径
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.source_repo }}
+          ref: ${{ inputs.source_branch }}
+      - name: 编译无签名
+        run: |
+          PROJ="${{ inputs.project_path }}"
+          SCHEME="${{ inputs.scheme }}"
+          if [ -z "$PROJ" ]; then
+            PROJ=$(find . -maxdepth 2 -name "*.xcworkspace" | head -1)
+          fi
+          if [ -z "$PROJ" ]; then
+            PROJ=$(find . -maxdepth 2 -name "*.xcodeproj" | head -1)
+          fi
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO archive -archivePath app.xcarchive
+      - name: 打包IPA
+        run: |
+          mkdir -p Payload
+          cp -r app.xcarchive/Products/Applications/*.app Payload/
+          zip -r unsigned.ipa Payload
+      - name: 上传IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: unsigned.ipa
